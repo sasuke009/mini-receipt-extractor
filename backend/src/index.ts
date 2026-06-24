@@ -15,6 +15,16 @@ app.get('/api/health', (_req, res) => {
 
 app.use('/api/upload', uploadRouter);
 
-app.listen(Number(PORT), () => {
+const server = app.listen(Number(PORT), () => {
   console.log(`Server running on http://localhost:${PORT}`);
+});
+
+server.on('error', (err: NodeJS.ErrnoException) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`\nError: Port ${PORT} is already in use.`);
+    console.error(`Run this to free it: npx kill-port ${PORT}\n`);
+  } else {
+    console.error('Server error:', err);
+  }
+  process.exit(1);
 });

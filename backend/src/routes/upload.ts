@@ -31,58 +31,62 @@ router.post('/', upload.single('receipt'), async (req, res) => {
     return;
   }
 
-  const imageBytes = await readFile(req.file.path);
+  try {
+    const imageBytes = await readFile(req.file.path);
 
-  const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash',
-    contents: [
-      {
-        role: 'user',
-        parts: [
-          {
-            inlineData: {
-              mimeType: req.file.mimetype,
-              data: imageBytes.toString('base64'),
+    const aiResponse = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            {
+              inlineData: {
+                mimeType: req.file.mimetype,
+                data: imageBytes.toString('base64'),
+              },
+            },
+            {
+              text: 'Extract the store name, total amount, and date from this receipt.',
+            },
+          ],
+        },
+      ],
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            storeName: {
+              type: Type.STRING,
+              description: 'Name of the store or merchant on the receipt',
+            },
+            total: {
+              type: Type.NUMBER,
+              description: 'Final total amount charged, as a decimal number',
+            },
+            date: {
+              type: Type.STRING,
+              description: 'Date of the transaction in YYYY-MM-DD format',
             },
           },
-          {
-            text: 'Extract the store name, total amount, and date from this receipt.',
-          },
-        ],
-      },
-    ],
-    config: {
-      responseMimeType: 'application/json',
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          storeName: {
-            type: Type.STRING,
-            description: 'Name of the store or merchant on the receipt',
-          },
-          total: {
-            type: Type.NUMBER,
-            description: 'Final total amount charged, as a decimal number',
-          },
-          date: {
-            type: Type.STRING,
-            description: 'Date of the transaction in YYYY-MM-DD format',
-          },
+          required: ['storeName', 'total', 'date'],
         },
-        required: ['storeName', 'total', 'date'],
       },
-    },
-  });
+    });
 
-  const rawText = response.text;
-  if (!rawText) {
-    res.status(502).json({ error: 'AI model returned an empty response' });
-    return;
+    const rawText = aiResponse.text;
+    if (!rawText) {
+      res.status(502).json({ error: 'AI model returned an empty response' });
+      return;
+    }
+
+    const extracted = JSON.parse(rawText) as ReceiptExtraction;
+    res.json({ filename: req.file.filename, extracted });
+  } catch (err: unknown) {
+    console.error('[upload] error:', err);
+    res.status(500).json({ error: 'Upload processing failed', detail: String(err) });
   }
-
-  const extracted = JSON.parse(rawText) as ReceiptExtraction;
-
-  res.json({ filename: req.file.filename, extracted });
 });
 
 export default router;
